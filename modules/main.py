@@ -35,7 +35,7 @@ def main():
     app = build_dashboard(df_train)
     
     # Run the Dash app (for external access, you might use host='0.0.0.0')
-    app.run_server(debug=True, host='0.0.0.0', port=8050)
+    app.run_server(debug=True)
 
 if __name__ == '__main__':
     main()

@@ -5,8 +5,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
 def train_predictive_model(df_train, test_data=None):
-    # Define your required columns, e.g., ['sbytes', 'dbytes', 'spkts', 'Label']
-    required_columns = ['sbytes', 'dbytes', 'spkts', 'Label']
+    # Update required columns with the correct target column name.
+    required_columns = ['sbytes', 'dbytes', 'spkts', 'attack_cat']
     for col in required_columns:
         if col not in df_train.columns:
             logging.error("Column '%s' is missing from the training set.", col)
@@ -14,20 +14,20 @@ def train_predictive_model(df_train, test_data=None):
 
     # Extract features and target for training
     X_train = df_train[['sbytes', 'dbytes', 'spkts']]
-    y_train = df_train['Label']
+    y_train = df_train['attack_cat']
     
-    # If you have a separate testing set, extract features and target similarly
+    # If you have a separate testing set, do similar extraction...
     if test_data is not None:
         for col in required_columns:
             if col not in test_data.columns:
                 logging.error("Column '%s' is missing from the testing set.", col)
                 return None
         X_test = test_data[['sbytes', 'dbytes', 'spkts']]
-        y_test = test_data['Label']
+        y_test = test_data['attack_cat']
     else:
         X_test = y_test = None
 
-    # Split data, train the model, and evaluate. For example, using a Random Forest:
+    # Continue with model training...
     from sklearn.ensemble import RandomForestClassifier
     from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
     import numpy as np
@@ -40,7 +40,6 @@ def train_predictive_model(df_train, test_data=None):
         y_pred = model.predict(X_test)
         acc = accuracy_score(y_test, y_pred)
         logging.info("Model Accuracy: %.2f%%", acc * 100)
-        # Optionally, compute and log confusion matrix, classification report, etc.
         cm = confusion_matrix(y_test, y_pred)
         logging.info("Confusion Matrix:\n%s", cm)
         cv_scores = np.mean([accuracy_score(y_test, model.predict(X_test))])

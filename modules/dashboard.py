@@ -50,7 +50,7 @@ def build_dashboard(df):
     [Input('event-type-dropdown', 'value')]
 )
     def update_charts(selected_proto):
-        # 1. Filter data by protocol, if that’s what your dropdown does
+        # 1. Filter data by protocol
         if 'proto' in df.columns and selected_proto:
             filtered_df = df[df['proto'] == selected_proto]
         else:
