@@ -30,10 +30,10 @@ def build_dashboard(df):
         html.Div([
             html.Label("Select Event Type:"),
             dcc.Dropdown(
-                id='event-type-dropdown',
-                options=[{'label': et, 'value': et} for et in df['event_type'].unique()] if 'event_type' in df.columns else [],
-                value=df['event_type'].unique()[0] if 'event_type' in df.columns else None
-            )
+            id='event-type-dropdown',
+            options=[{'label': p, 'value': p} for p in df['proto'].unique()] if 'proto' in df.columns else [],
+            value=df['proto'].unique()[0] if 'proto' in df.columns else None
+        )
         ], style={'width': '40%', 'margin': '20px 0'}),
         
         # Graph components for visualizations
@@ -44,38 +44,40 @@ def build_dashboard(df):
     
     # Callback to update the charts based on dropdown selection
     @app.callback(
-        [Output('time-series-chart', 'figure'),
-         Output('bar-chart', 'figure'),
-         Output('pie-chart', 'figure')],
-        [Input('event-type-dropdown', 'value')]
-    )
-    def update_charts(selected_event):
-        # Filter the data based on the selected event type if applicable
-        filtered_df = df[df['event_type'] == selected_event] if 'event_type' in df.columns and selected_event else df
-        
-        # Build Time Series Chart (if data available)
-        if 'timestamp' in filtered_df.columns and 'traffic_volume' in filtered_df.columns:
-            filtered_df['timestamp'] = pd.to_datetime(filtered_df['timestamp'])
-            ts_fig = px.line(filtered_df, x='timestamp', y='traffic_volume', title='Network Traffic Over Time')
+    [Output('time-series-chart', 'figure'),
+     Output('bar-chart', 'figure'),
+     Output('pie-chart', 'figure')],
+    [Input('event-type-dropdown', 'value')]
+)
+    def update_charts(selected_proto):
+        # 1. Filter data by protocol, if that’s what your dropdown does
+        if 'proto' in df.columns and selected_proto:
+            filtered_df = df[df['proto'] == selected_proto]
         else:
-            ts_fig = {}
+            filtered_df = df
+
+        # 2. Time Series Chart (example using 'Stime' and 'sbytes')
+        #    Convert 'Stime' from integer to a datetime if you want a real date/time axis.
+        ts_fig = {}
+        if 'Stime' in filtered_df.columns and 'sbytes' in filtered_df.columns:
+            # Convert to datetime if needed
+            filtered_df['Stime'] = pd.to_datetime(filtered_df['Stime'], unit='s')
+            ts_fig = px.line(filtered_df, x='Stime', y='sbytes', title='Traffic Over Time (sbytes)')
         
-        # Build Bar Chart for event type counts
-        if 'event_type' in filtered_df.columns:
-            bar_data = filtered_df['event_type'].value_counts().reset_index()
-            bar_data.columns = ['event_type', 'count']
-            bar_fig = px.bar(bar_data, x='event_type', y='count', title='Event Type Frequency')
-        else:
-            bar_fig = {}
+        # 3. Bar Chart (example counting 'proto' occurrences)
+        bar_fig = {}
+        if 'proto' in filtered_df.columns:
+            bar_data = filtered_df['proto'].value_counts().reset_index()
+            bar_data.columns = ['protocol', 'count']
+            bar_fig = px.bar(bar_data, x='protocol', y='count', title='Protocol Frequency')
         
-        # Build Pie Chart for attack category distribution
-        if 'attack_category' in filtered_df.columns:
-            pie_data = filtered_df['attack_category'].value_counts().reset_index()
-            pie_data.columns = ['attack_category', 'count']
-            pie_fig = px.pie(pie_data, names='attack_category', values='count', title='Attack Category Distribution')
-        else:
-            pie_fig = {}
-        
+        # 4. Pie Chart (example for 'attack_cat')
+        pie_fig = {}
+        if 'attack_cat' in filtered_df.columns:
+            pie_data = filtered_df['attack_cat'].value_counts().reset_index()
+            pie_data.columns = ['attack_cat', 'count']
+            pie_fig = px.pie(pie_data, names='attack_cat', values='count', title='Attack Category Distribution')
+
         return ts_fig, bar_fig, pie_fig
     
     return app

@@ -3,44 +3,77 @@ import logging
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def load_and_merge_data(main_filepath, gt_filepath):
+def load_and_merge_data(main_filepath, gt_filepath, features_filepath):
     """
-    Load the main dataset and ground truth table, merge them, and perform cleaning.
-
+    Load the main dataset using column names from the features file,
+    then merge it with the ground truth table.
+    
     Args:
         main_filepath (str): Path to the main dataset CSV file.
         gt_filepath (str): Path to the ground truth CSV file.
-
+        features_filepath (str): Path to the features CSV file containing column metadata.
+    
     Returns:
         pd.DataFrame: Merged and cleaned dataset.
     """
-    # Check if files exist
-    if not os.path.exists(main_filepath):
-        logging.error(f"Main data file {main_filepath} not found.")
-        return pd.DataFrame()
+    # Check for file existence
+    for path, desc in [(main_filepath, "Main data file"), (gt_filepath, "Ground truth file"), 
+                       (features_filepath, "Features file")]:
+        if not os.path.exists(path):
+            logging.error(f"{desc} {path} not found.")
+            return pd.DataFrame()
 
-    if not os.path.exists(gt_filepath):
-        logging.error(f"Ground truth file {gt_filepath} not found.")
+    # Load the features file with the header (it should have columns like "No.", "Name", "Type ", "Description")
+    try:
+        features_df = pd.read_csv(features_filepath, encoding='cp1252')
+    except Exception as e:
+        logging.error("Error reading features file: %s", e)
         return pd.DataFrame()
-
+    
+    # Extract the actual feature names from the "Name" column.
+    if "Name" not in features_df.columns:
+        logging.error("Features file does not contain 'Name' column.")
+        return pd.DataFrame()
+    unsw_columns = features_df["Name"].tolist()
+    logging.info("Loaded feature names from features file: %s", unsw_columns)
+    
+    # Load the main dataset using these column names.
     logging.info("Loading main dataset from %s", main_filepath)
-    df_main = pd.read_csv(main_filepath)
-
-    logging.info("Loading ground truth data from %s", gt_filepath)
-    df_gt = pd.read_csv(gt_filepath)
-
-    # Merge on a common identifier. Change 'session_id' to whatever column both CSVs share.
-    # 'how="inner"' merges only matching rows. Use 'how="left"' if you want all main data rows retained.
-    if 'session_id' not in df_main.columns or 'session_id' not in df_gt.columns:
-        logging.error("Column 'session_id' not found in one of the files. "
-                      "Update the merge key to match your actual dataset schema.")
+    try:
+        df_main = pd.read_csv(main_filepath, header=None, names=unsw_columns, low_memory=False)
+    except Exception as e:
+        logging.error("Error reading main dataset: %s", e)
         return pd.DataFrame()
 
-    logging.info("Merging main dataset with ground truth on 'session_id'...")
-    df_merged = pd.merge(df_main, df_gt, on='session_id', how='inner')
+    # Load the ground truth data.
+    logging.info("Loading ground truth data from %s", gt_filepath)
+    try:
+        df_gt = pd.read_csv(gt_filepath, low_memory=False)
+    except Exception as e:
+        logging.error("Error reading ground truth data: %s", e)
+        return pd.DataFrame()
+
+    # Debug: Print column names from both datasets.
+    logging.info("Main dataset columns after renaming: %s", df_main.columns.tolist())
+    logging.info("Ground truth columns: %s", df_gt.columns.tolist())
+
+    # Define the composite key for merging.
+        # Define the composite key for merging
+    merge_columns_main = ["srcip", "sport", "dstip", "dsport", "proto"]
+    merge_columns_gt = ["Source IP", "Source Port", "Destination IP", "Destination Port", "Protocol"]
+
+    # Ensure merge key columns are of the same type (convert to string)
+    for col in merge_columns_main:
+        df_main[col] = df_main[col].astype(str)
+    for col in merge_columns_gt:
+        df_gt[col] = df_gt[col].astype(str)
+
+    logging.info("Merging main dataset with ground truth on composite key: %s (main) and %s (gt)",
+                 merge_columns_main, merge_columns_gt)
+    df_merged = pd.merge(df_main, df_gt, left_on=merge_columns_main, right_on=merge_columns_gt, how='inner')
     logging.info("Merged dataset shape: %s", df_merged.shape)
 
-    # Clean the merged data
+    # Clean the merged data.
     df_merged.drop_duplicates(inplace=True)
     df_merged.fillna(method='ffill', inplace=True)
     logging.info("Data cleaning complete. Final dataset shape: %s", df_merged.shape)
@@ -50,7 +83,7 @@ def load_and_merge_data(main_filepath, gt_filepath):
 def exploratory_data_analysis(df):
     """
     Perform Exploratory Data Analysis (EDA) to generate descriptive statistics and visualizations.
-
+    
     Visualizations include:
         - Time Series Plot (if 'timestamp' and 'traffic_volume' exist)
         - Bar Chart (if 'event_type' exists)
@@ -63,11 +96,11 @@ def exploratory_data_analysis(df):
     stats = df.describe()
     logging.info("Data Summary:\n%s", stats)
 
-    # Time Series Example
+    # Time Series Example (if applicable)
     if 'timestamp' in df.columns and 'traffic_volume' in df.columns:
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df.sort_values('timestamp', inplace=True)
-        plt.figure(figsize=(10,6))
+        plt.figure(figsize=(10, 6))
         plt.plot(df['timestamp'], df['traffic_volume'], label='Traffic Volume')
         plt.xlabel('Time')
         plt.ylabel('Traffic Volume')
@@ -78,10 +111,10 @@ def exploratory_data_analysis(df):
         plt.close()
         logging.info("Time series plot saved as time_series_plot.png")
 
-    # Bar Chart Example
+    # Bar Chart Example (if applicable)
     if 'event_type' in df.columns:
         event_counts = df['event_type'].value_counts()
-        plt.figure(figsize=(8,5))
+        plt.figure(figsize=(8, 5))
         event_counts.plot(kind='bar')
         plt.xlabel('Event Type')
         plt.ylabel('Count')
@@ -91,10 +124,10 @@ def exploratory_data_analysis(df):
         plt.close()
         logging.info("Bar chart saved as bar_chart_event_types.png")
 
-    # Pie Chart Example
+    # Pie Chart Example (if applicable)
     if 'attack_category' in df.columns:
         attack_counts = df['attack_category'].value_counts()
-        plt.figure(figsize=(6,6))
+        plt.figure(figsize=(6, 6))
         attack_counts.plot(kind='pie', autopct='%1.1f%%')
         plt.ylabel('')
         plt.title('Attack Category Distribution')
