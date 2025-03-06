@@ -1,6 +1,7 @@
 import os
 import logging
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from flask import Flask
 from flask_talisman import Talisman
 import dash_auth
 
