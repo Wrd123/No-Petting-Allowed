@@ -1,83 +1,131 @@
 import dash
-from dash import dcc, html, Input, Output
+import dash_bootstrap_components as dbc
+from dash import html, dcc
+from dash.dependencies import Input, Output
 import plotly.express as px
 import pandas as pd
 
 def build_dashboard(df):
     """
-    Build an interactive dashboard using Plotly Dash.
+    Build a polished cybersecurity analytics dashboard using Dash and Bootstrap.
     
-    The dashboard includes:
-        - A time series chart for network traffic.
-        - A bar chart for event type frequency.
-        - A pie chart for attack category distribution.
-        - An interactive dropdown to filter data by event type.
+    The layout includes:
+      - A navigation bar (header) for branding.
+      - A fixed sidebar for filtering (e.g., protocol selection).
+      - A main content area with a time series chart and a row with a bar and pie chart.
     
     Args:
-        df (pd.DataFrame): Cleaned dataset.
-        
+        df (pd.DataFrame): The DataFrame containing the merged dataset.
+    
     Returns:
-        dash.Dash: The Dash application instance.
+        dash.Dash: The configured Dash application.
     """
-    app = dash.Dash(__name__)
+    # Use a Bootstrap theme (e.g., SLATE for a dark, modern look)
+    app = dash.Dash(__name__, external_stylesheets=[dbc.themes.SLATE])
     
-    # Layout definition for the dashboard
-    app.layout = html.Div(children=[
-        html.H1("Cybersecurity Analytics Dashboard"),
-        html.Div("Interactive dashboard for monitoring network traffic and detecting anomalies."),
-        
-        # Dropdown for filtering by event type (if available)
-        html.Div([
-            html.Label("Select Event Type:"),
-            dcc.Dropdown(
-            id='event-type-dropdown',
-            options=[{'label': p, 'value': p} for p in df['proto'].unique()] if 'proto' in df.columns else [],
-            value=df['proto'].unique()[0] if 'proto' in df.columns else None
-        )
-        ], style={'width': '40%', 'margin': '20px 0'}),
-        
-        # Graph components for visualizations
-        dcc.Graph(id='time-series-chart'),
-        dcc.Graph(id='bar-chart'),
-        dcc.Graph(id='pie-chart')
-    ])
-    
-    # Callback to update the charts based on dropdown selection
+    # Create a navigation bar
+    navbar = dbc.NavbarSimple(
+        brand="Cybersecurity Analytics Dashboard",
+        brand_href="#",
+        color="primary",
+        dark=True,
+        sticky="top",
+    )
+
+    # Create a sidebar for filters, replacing dbc.FormGroup with an html.Div with className 'form-group'
+    sidebar = html.Div(
+        [
+            html.H5("Filters", className="display-6", style={"color": "#ffffff"}),
+            html.Hr(),
+            html.Div(
+                [
+                    dbc.Label("Select Protocol", style={"color": "#ffffff"}),
+                    dcc.Dropdown(
+                        id="protocol-dropdown",
+                        options=[{"label": proto, "value": proto} for proto in sorted(df["proto"].unique())],
+                        value=sorted(df["proto"].unique())[0],
+                        clearable=False,
+                    ),
+                ],
+                className="form-group"
+            ),
+        ],
+        style={
+            "position": "fixed",
+            "top": "70px",  # height of the navbar
+            "left": 0,
+            "bottom": 0,
+            "width": "18rem",
+            "padding": "2rem 1rem",
+            "background-color": "#343a40",
+            "overflowY": "auto",
+        },
+    )
+
+    # Create main content area
+    content = html.Div(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(dcc.Graph(id="time-series-chart"), md=12),
+                ],
+                className="mb-4",
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(dcc.Graph(id="bar-chart"), md=6),
+                    dbc.Col(dcc.Graph(id="pie-chart"), md=6),
+                ]
+            ),
+        ],
+        style={"margin-left": "20rem", "margin-right": "2rem", "padding": "2rem 1rem"},
+    )
+
+    # Define the app layout
+    app.layout = html.Div([navbar, sidebar, content])
+
+    # Callback for updating charts based on selected protocol
     @app.callback(
-    [Output('time-series-chart', 'figure'),
-     Output('bar-chart', 'figure'),
-     Output('pie-chart', 'figure')],
-    [Input('event-type-dropdown', 'value')]
+    [Output("time-series-chart", "figure"),
+     Output("bar-chart", "figure"),
+     Output("pie-chart", "figure")],
+    [Input("protocol-dropdown", "value")]
 )
     def update_charts(selected_proto):
-        # 1. Filter data by protocol
-        if 'proto' in df.columns and selected_proto:
-            filtered_df = df[df['proto'] == selected_proto]
-        else:
-            filtered_df = df
-
-        # 2. Time Series Chart (example using 'Stime' and 'sbytes')
-        #    Convert 'Stime' from integer to a datetime if you want a real date/time axis.
+        # Filter the dataset based on the selected protocol if one is chosen
+        filtered_df = df[df["proto"] == selected_proto] if selected_proto else df
+        print("Filtered DataFrame shape:", filtered_df.shape)
+        
+        # --- Time Series Chart ---
+        # Since there is no timestamp column, we use the DataFrame index as a proxy.
         ts_fig = {}
-        if 'Stime' in filtered_df.columns and 'sbytes' in filtered_df.columns:
-            # Convert to datetime if needed
-            filtered_df['Stime'] = pd.to_datetime(filtered_df['Stime'], unit='s')
-            ts_fig = px.line(filtered_df, x='Stime', y='sbytes', title='Traffic Over Time (sbytes)')
+        if "sbytes" in filtered_df.columns:
+            ts_fig = px.line(filtered_df, x=filtered_df.index, y="sbytes", 
+                            title="Traffic Over Rows (sbytes)",
+                            labels={"x": "Row Index", "sbytes": "Source Bytes"})
+        else:
+            ts_fig = px.scatter(title="No source bytes data available")
         
-        # 3. Bar Chart (example counting 'proto' occurrences)
+        # --- Bar Chart: Protocol Frequency ---
         bar_fig = {}
-        if 'proto' in filtered_df.columns:
-            bar_data = filtered_df['proto'].value_counts().reset_index()
-            bar_data.columns = ['protocol', 'count']
-            bar_fig = px.bar(bar_data, x='protocol', y='count', title='Protocol Frequency')
+        if "proto" in filtered_df.columns:
+            bar_data = filtered_df["proto"].value_counts().reset_index()
+            bar_data.columns = ["protocol", "count"]
+            bar_fig = px.bar(bar_data, x="protocol", y="count", title="Protocol Frequency",
+                            labels={"protocol": "Protocol", "count": "Count"})
+        else:
+            bar_fig = px.scatter(title="No protocol data available")
         
-        # 4. Pie Chart (example for 'attack_cat')
+        # --- Pie Chart: Attack Category Distribution ---
         pie_fig = {}
-        if 'attack_cat' in filtered_df.columns:
-            pie_data = filtered_df['attack_cat'].value_counts().reset_index()
-            pie_data.columns = ['attack_cat', 'count']
-            pie_fig = px.pie(pie_data, names='attack_cat', values='count', title='Attack Category Distribution')
-
+        if "attack_cat" in filtered_df.columns:
+            pie_data = filtered_df["attack_cat"].value_counts().reset_index()
+            pie_data.columns = ["attack_cat", "count"]
+            pie_fig = px.pie(pie_data, names="attack_cat", values="count", title="Attack Category Distribution")
+        else:
+            pie_fig = px.scatter(title="No attack category data available")
+        
         return ts_fig, bar_fig, pie_fig
-    
+
+
     return app
